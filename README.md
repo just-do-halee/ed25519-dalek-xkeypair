@@ -21,5 +21,10 @@
 
 | [Docs](https://docs.rs/ed25519-dalek-xkeypair) | [Latest Note](https://github.com/just-do-halee/ed25519-dalek-xkeypair/blob/main/CHANGELOG.md) |
 
+```toml
+[dependencies]
+ed25519-dalek-xkeypair = "0.1.1"
+```
+
 ## License:
 * MIT OR Apache-2.0

@@ -11,11 +11,11 @@ pub extern crate ed25519_dalek;
 
 mod errors;
 mod key;
-mod types;
+pub mod types;
 
 pub use derivation_path::DerivationPath;
-pub use key::ExtendedKeypair;
-pub use types::{consts, ExtPrefix, PublicKey, SecretKey};
+pub use key::{ExtendedKeypair, SEED_SIZE_LIST};
+pub use types::{consts, DalekKeypair, ExtPrefix, PublicKey, SecretKey};
 
 #[cfg(feature = "default")]
 extern crate alloc;

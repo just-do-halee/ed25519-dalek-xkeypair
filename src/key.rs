@@ -13,7 +13,7 @@ use zeroize::Zeroize;
 type HmacSha512 = Hmac<Sha512>;
 
 const ED25519_DOMAIN_NAME: &str = "ed25519 seed";
-const SEED_SIZE_LIST: &[usize] = &[16, 32, 64];
+pub const SEED_SIZE_LIST: &[usize] = &[16, 32, 64];
 
 #[derive(Debug)]
 pub struct ExtendedKeypair {
