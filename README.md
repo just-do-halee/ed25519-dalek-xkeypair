@@ -17,13 +17,21 @@
 
 
 *BIP32 implementation for ed25519-dalek key pairs.*
-<br>(no-std support)
 
 | [Docs](https://docs.rs/ed25519-dalek-xkeypair) | [Latest Note](https://github.com/just-do-halee/ed25519-dalek-xkeypair/blob/main/CHANGELOG.md) |
 
 ```toml
 [dependencies]
-ed25519-dalek-xkeypair = "0.1.1"
+ed25519-dalek-xkeypair = "1.0.0"
+```
+
+## No-std
+
+Disable default feature(allocator is needed).
+
+```toml
+[dependencies]
+ed25519-dalek-xkeypair = { version = "1.0.0", default-features = false }
 ```
 
 ## License:

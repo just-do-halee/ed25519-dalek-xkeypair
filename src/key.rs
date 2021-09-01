@@ -15,6 +15,7 @@ type HmacSha512 = Hmac<Sha512>;
 const ED25519_DOMAIN_NAME: &str = "ed25519 seed";
 pub const SEED_SIZE_LIST: &[usize] = &[16, 32, 64];
 
+/// simply represented by `extended secret key`
 #[derive(Debug)]
 pub struct ExtendedKeypair {
     prefix: ExtPrefix,
@@ -33,6 +34,7 @@ impl PartialEq for ExtendedKeypair {
 impl Eq for ExtendedKeypair {}
 
 impl ExtendedKeypair {
+    /// 78 (extended secret key)
     pub const LENGTH: usize = consts::TOTAL_LENGTH;
     pub const BASE58MAX_LENGTH: usize = 112;
 
@@ -44,6 +46,20 @@ impl ExtendedKeypair {
     }
     pub fn pair(&self) -> &DalekKeypair {
         &self.pair
+    }
+
+    pub fn secret_to_hex(&self) -> String {
+        hex::encode(&self.pair.secret)
+    }
+    pub fn public_to_hex(&self) -> String {
+        hex::encode(&self.pair.public)
+    }
+    pub fn chaincode_to_hex(&self) -> String {
+        hex::encode(&self.attrs.chain_code)
+    }
+    /// base58check(`extended secret key`)
+    pub fn to_base58check(&self) -> String {
+        bs58::encode(&self.to_bytes()).with_check().into_string()
     }
 
     pub fn dalekpair_from_secret_bytes(bytes: &[u8]) -> Result<DalekKeypair> {
@@ -67,31 +83,37 @@ impl ExtendedKeypair {
 
     #[inline(always)]
     fn convert_to_bytes(xkey: &Self) -> [u8; Self::LENGTH] {
-        xkey.prefix
-            .to_bytes()
-            .iter()
-            .chain(
+        let mut bytes = [0u8; Self::LENGTH];
+        for (src, dst) in bytes.iter_mut().zip(
+            xkey.prefix.to_bytes().iter().chain(
                 xkey.attrs
                     .to_bytes()
                     .iter()
                     .chain([0u8].iter().chain(xkey.pair.secret.as_bytes().iter())),
-            )
-            .copied()
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap()
+            ),
+        ) {
+            *src = *dst;
+        }
+        bytes
     }
+
     #[inline(always)]
     pub fn to_bytes(&self) -> [u8; Self::LENGTH] {
         Self::convert_to_bytes(self)
     }
     #[inline(always)]
     pub fn into_bytes(self) -> [u8; Self::LENGTH] {
-        Self::convert_to_bytes(&self)
+        self.to_bytes()
     }
+
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != Self::LENGTH {
-            return errbang!(err::InvalidLenSize);
+            return errbang!(
+                err::InvalidLenSize,
+                "{}, must be {}.",
+                bytes.len(),
+                Self::LENGTH
+            );
         }
         let prefix = ExtPrefix::from_bytes(&bytes[..ExtPrefix::LENGTH])?;
         let attrs_end_len = ExtPrefix::LENGTH + ExtAttributes::LENGTH;
@@ -104,11 +126,12 @@ impl ExtendedKeypair {
         })
     }
 
+    /// base58check(`extended secret key`)
     pub fn write_base58check<'a>(
         &self,
         output: &'a mut [u8; Self::BASE58MAX_LENGTH],
     ) -> Result<&'a str> {
-        let mut buf = self.to_bytes();
+        let mut buf = Self::convert_to_bytes(self);
         let base58_len = errcast!(
             bs58::encode(&buf).with_check().into(output.as_mut()),
             err::Parser
@@ -118,14 +141,20 @@ impl ExtendedKeypair {
         Ok(errcast!(str::from_utf8(&output[..base58_len]), err::Parser))
     }
 
-    pub fn from_seed(seed: &[u8], prefix: ExtPrefix) -> Result<Self> {
-        if !SEED_SIZE_LIST.contains(&seed.as_ref().len()) {
-            return errbang!(err::InvalidLenSize);
+    pub fn from_seed_with_domain(
+        domain_name: &str,
+        seed: &[u8],
+        prefix: ExtPrefix,
+    ) -> Result<Self> {
+        if !SEED_SIZE_LIST.contains(&seed.len()) {
+            return errbang!(
+                err::InvalidLenSize,
+                "{}, must be included in {:?}",
+                seed.len(),
+                SEED_SIZE_LIST
+            );
         }
-        let mut mac = errcast!(
-            HmacSha512::new_from_slice(ED25519_DOMAIN_NAME.as_ref()),
-            err::Hmac
-        );
+        let mut mac = errcast!(HmacSha512::new_from_slice(domain_name.as_ref()), err::Hmac);
 
         mac.update(seed);
         let bytes = mac.finalize().into_bytes();
@@ -153,18 +182,23 @@ impl ExtendedKeypair {
         })
     }
 
+    #[inline(always)]
+    pub fn from_seed(seed: &[u8], prefix: ExtPrefix) -> Result<Self> {
+        Self::from_seed_with_domain(ED25519_DOMAIN_NAME, seed, prefix)
+    }
+
     pub fn derive<P: AsRef<[ChildIndex]>>(&self, path: &P) -> Result<Self> {
         let mut path = path.as_ref().iter();
         let mut next = match path.next() {
             Some(index) if index.is_hardened() => self.derive_child(index.to_u32())?,
-            Some(_) => return errbang!(err::Parser),
+            Some(_) => return errbang!(err::Parser, "must be hardened index only."),
             None => self.clone(),
         };
         for index in path {
             if index.is_hardened() {
                 next = next.derive_child(index.to_u32())?;
             } else {
-                return errbang!(err::Parser);
+                return errbang!(err::Parser, "must be hardened index only.");
             }
         }
         Ok(next)
@@ -205,7 +239,7 @@ impl ExtendedKeypair {
         };
 
         Ok(Self {
-            prefix: self.prefix.clone(),
+            prefix: self.prefix,
             attrs,
             pair,
         })
@@ -216,7 +250,7 @@ impl Clone for ExtendedKeypair {
     #[inline]
     fn clone(&self) -> Self {
         Self {
-            prefix: self.prefix.clone(),
+            prefix: self.prefix,
             attrs: self.attrs.clone(),
             pair: DalekKeypair {
                 secret: SecretKey::from_bytes(self.pair.secret.as_bytes()).unwrap(),

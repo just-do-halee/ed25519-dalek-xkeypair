@@ -4,7 +4,7 @@
 //! # ***`ed25519-dalek-xkeypair`***
 //! *BIP32 implementation for ed25519-dalek key pairs.*
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), not(test), no_std)]
 
 pub extern crate derivation_path;
 pub extern crate ed25519_dalek;
@@ -17,39 +17,51 @@ pub use derivation_path::DerivationPath;
 pub use key::{ExtendedKeypair, SEED_SIZE_LIST};
 pub use types::{consts, DalekKeypair, ExtPrefix, PublicKey, SecretKey};
 
-#[cfg(feature = "default")]
 extern crate alloc;
 
 #[doc(hidden)]
 pub mod private {
-    #[cfg(feature = "default")]
-    pub use alloc::vec::Vec;
-    #[cfg(feature = "default")]
+    pub use alloc::string::{String, ToString};
+    
+    #[cfg(not(feature = "std"))]
     pub use core::{
         convert::TryInto,
         fmt::{self, Display},
+        iter::Chain,
         ops::{Deref, DerefMut},
+        slice::Iter,
         str::{self, FromStr},
     };
     #[cfg(feature = "std")]
     pub use std::{
         convert::TryInto,
         fmt::{self, Display},
+        iter::Chain,
         ops::{Deref, DerefMut},
+        slice::Iter,
         str::{self, FromStr},
     };
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{private::*, *};
     use crate::types::ParentFingerprint;
     use types::{ChildIndex, DalekKeypair, ExtAttributes};
 
-    use core::convert::TryInto;
-
+    #[inline]
     fn root(seed: &str) -> ExtendedKeypair {
-        ExtendedKeypair::from_seed(&hex::decode(seed).unwrap(), ExtPrefix::tprv()).unwrap()
+        root_with_domain("ed25519 seed", seed)
+    }
+
+    #[inline]
+    fn root_with_domain(domain_name: &str, seed: &str) -> ExtendedKeypair {
+        ExtendedKeypair::from_seed_with_domain(
+            domain_name,
+            &hex::decode(seed).unwrap(),
+            ExtPrefix::xprv(),
+        )
+        .unwrap()
     }
 
     fn extract_target(
@@ -85,21 +97,16 @@ mod tests {
         let xpair_bytes = xpair.to_bytes();
         let xpair2 = ExtendedKeypair::from_bytes(&xpair_bytes).unwrap();
         assert_eq!(xpair, xpair2);
-        assert_eq!(
-            xpair.pair().secret.as_bytes(),
-            xpair2.pair().secret.as_bytes()
-        );
-        assert_eq!(
-            xpair.pair().public.as_bytes(),
-            xpair2.pair().public.as_bytes()
-        );
     }
 
     #[test]
     fn prefix() {
         let xpair = root("000102030405060708090a0b0c0d0e0f");
-        let tprv: ExtPrefix = "tprv".parse().unwrap();
-        assert_eq!(xpair.prefix(), &tprv);
+        let xpair_prefix = *xpair.prefix();
+        let tprv: ExtPrefix = "xprv".parse().unwrap();
+        assert_eq!(xpair_prefix, tprv);
+        assert_eq!(xpair_prefix.as_str(), "xprv");
+        assert_eq!(xpair_prefix.into_bytes(), 0x0488ade4_u32.to_be_bytes());
     }
 
     #[test]
@@ -277,5 +284,76 @@ mod tests {
             "551d333177df541ad876a60ea71f00447931c0a9da16f227c11ea080d7391b8d",
         );
         assert_node_vs_target(&node, target);
+    }
+
+    const BITCOIN_DOMAIN: &str = "Bitcoin seed";
+
+    #[test]
+    fn bitcoin_domain() {
+        // vector 1
+        let node = root_with_domain(BITCOIN_DOMAIN, "000102030405060708090a0b0c0d0e0f");
+        assert_eq!(String::from("xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"), node.to_base58check());
+        let node = node.derive_child(0).unwrap();
+        assert_eq!(String::from("xprv9u83dCmo786mnLCCMbpxz7P7KHcXyc9bSs3QLD4nh5GirqJU1bktZdV8Pfmhn2kTumVq28Ri8P5Jh3Uzzrcoo2yLkhSdyuLMFpaFjk826hK"), node.to_base58check());
+        let node = node.derive_child(1).unwrap();
+        assert_eq!(String::from("xprv9wsML8pNBgdH4BVoGwwMzrcwDnCi1mU4unmSANUiKYcJRVw3unSE4JCJDKk1VssxqUayHw8N3y6SXTrH5iRQxF8zsYzbJ8zx9o13rnACnWA"), node.to_base58check());
+        let node = node.derive_child(2).unwrap();
+        assert_eq!(String::from("xprv9zQ82qYArGAyM1ukCj21BcfUTdZwD5hqvgLTndcuELH2CbFXYJR55wVwkzTZSN4KApQLZE6La9Tak47jZePyuqJVu6nixKrLPvfMXAHep43"), node.to_base58check());
+        let node = node.derive_child(2).unwrap();
+        assert_eq!(String::from("xprvA29rGe9hZCq8wpSSdZi2LL542YEuQjDLyrSiA7ftbvZ8DYVFD7aPiUBeQzrFsx8jiuMq4tLnX3M4CKdrEnddEeLLeEq7BYGAUWJ99nzQxx1"), node.to_base58check());
+        let node = node.derive_child(1000000000).unwrap();
+        assert_eq!(String::from("xprvA2scTkopJdBcu181Wea8T95HWNQV5YKsbBK3gtvnNZAYVRRCMPwqwtLcCwMKPZTjKdBYEVBefGE5k8QmGAGXH6xoCA54D47ghCYgsPNTxXn"), node.to_base58check());
+
+        // vector 2
+        let node = root_with_domain(BITCOIN_DOMAIN, "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542");
+        assert_eq!(String::from("xprv9s21ZrQH143K31xYSDQpPDxsXRTUcvj2iNHm5NUtrGiGG5e2DtALGdso3pGz6ssrdK4PFmM8NSpSBHNqPqm55Qn3LqFtT2emdEXVYsCzC2U"), node.to_base58check());
+        let node = node.derive_child(0).unwrap();
+        assert_eq!(String::from("xprv9uoxsxFvchfqRWz1kBdoKTjy6RASQNXmkzqmztjAANkApTryXcE3Yko5DWZVToJPaAcQkzVnL5uDiGvr7XFdCVPU25cdHJe2iyii1kFkkSH"), node.to_base58check());
+        let node = node.derive_child(2147483647).unwrap();
+        assert_eq!(String::from("xprv9wJ5oztQwNwUBfEwkyjfQh4JXrgmPwdcpwdwLQyTop64Y3XWebyL2RTaURSQatfKGQHUuPosA2GJTeruT7obQ5JEh7cTPsHeAmqC4FEwCTi"), node.to_base58check());
+        let node = node.derive_child(1).unwrap();
+        assert_eq!(String::from("xprv9yRhmBbnPCXTf5MX1b4TbzvqdGRDq4H6L7LQTkMh4pjsJuvqsgacj5tuoUWa1SnezLJ22pKT9PmUSCr6dptJmFamb5t2NDKGwD9bhDbvywK"), node.to_base58check());
+        let node = node.derive_child(2147483646).unwrap();
+        assert_eq!(String::from("xprv9zihxdM8vRz1eaeMpXJ1NBQgxGF6uuw9vudM3ywjYGX23i2y2yD2rYsMdAQjCjtQaA5VWd3vTLnW6xDP4xeESCUnUVnWBcdZMnz9amhmqPW"), node.to_base58check());
+        let node = node.derive_child(2).unwrap();
+        assert_eq!(String::from("xprvA3UGhbTpoQYCvJQ28mMahx38duM9dsqoKA4wJLVBphBysz4bi6xcWWkPDDvZHuFXv2sCTV3uy8GwdG3pXHU5yMDhNar1KgEJixLx7KTgov3"), node.to_base58check());
+
+        // vector 3
+        let node = root_with_domain(BITCOIN_DOMAIN, "4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4acba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be");
+        assert_eq!(String::from("xprv9s21ZrQH143K25QhxbucbDDuQ4naNntJRi4KUfWT7xo4EKsHt2QJDu7KXp1A3u7Bi1j8ph3EGsZ9Xvz9dGuVrtHHs7pXeTzjuxBrCmmhgC6"), node.to_base58check());
+        let node = node.derive_child(0).unwrap();
+        assert_eq!(String::from("xprv9uUC7tgrZyTsQXZuCX4hXdvh8Fvf3D8Kvf5KDL3LoFfjbiCoiZ199BZR7ih3PLLNWgbdwotTsadW6WaAU8bYCebi5HMHRhXjBnhrSRPxTrG"), node.to_base58check());
+
+        // vector 4
+        let node = root_with_domain(
+            BITCOIN_DOMAIN,
+            "3ddd5602285899a946114506157c7997e5444528f3003f6134712147db19b678",
+        );
+        assert_eq!(String::from("xprv9s21ZrQH143K48vGoLGRPxgo2JNkJ3J3fqkirQC2zVdk5Dgd5w14S7fRDyHH4dWNHUgkvsvNDCkvAwcSHNAQwhwgNMgZhLtQC63zxwhQmRv"), node.to_base58check());
+        let node = node.derive_child(0).unwrap();
+        assert_eq!(String::from("xprv9u7vbSZwGt2xgUxYYMuYEe3wwEDXyrY5WYi4Snq2J4ax1gVBqTtj5Byg6TuxnRSwvk9r6Z72Mnu7cbXas3XcuYhuL3BHrhBuhy3xP6ZmBzz"), node.to_base58check());
+        let node = node.derive_child(1).unwrap();
+        assert_eq!(String::from("xprv9x6xhngzXPAiQyhJHrXrXBbPjK1yzbKjoxyHRM8Z4aWjBZeGkzMgdvFa1HgEXKVRw7HMh52K22L8RxXc4bc2YhxieGcifeLnGktRbeYnwiJ"), node.to_base58check());
+    }
+
+    #[test]
+    fn bip0032_testvectors() {
+        // https://en.bitcoin.it/wiki/BIP_0032_TestVectors
+
+        // vector 1
+        let node = root_with_domain(BITCOIN_DOMAIN, "000102030405060708090a0b0c0d0e0f");
+        assert_eq!(0x0488ade4, node.prefix().numbs);
+        assert_eq!(
+            String::from("e8f32e723decf4051aefac8e2c93c9c5b214313817cdb01a1494b917c8436b35"),
+            node.secret_to_hex()
+        );
+        assert_eq!(
+            String::from("873dff81c02f525623fd1fe5167eac3a55a049de3d314bb42ee227ffed37d508"),
+            node.chaincode_to_hex()
+        );
+        assert_eq!(
+            String::from("xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"),
+            node.to_base58check()
+        );
     }
 }

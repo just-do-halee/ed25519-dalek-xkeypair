@@ -8,7 +8,9 @@ use zeroize::Zeroize;
 pub use ed25519_dalek::{Keypair as DalekKeypair, PublicKey, SecretKey};
 
 pub mod consts {
+    /// 4
     pub const CHECKSUM_LENGTH: usize = 4;
+    /// 78
     pub const TOTAL_LENGTH: usize =
         super::ExtPrefix::LENGTH + super::ExtAttributes::LENGTH + EXTKEY_LENGTH;
 
@@ -42,10 +44,13 @@ pub struct ExtAttributes {
 }
 
 impl ExtAttributes {
+    /// 41
     pub const LENGTH: usize = consts::DEPTH_LENGTH
         + consts::FINGERPRINT_LENGTH
         + consts::CHILDINDEX_LENGTH
         + consts::CHAINCODE_LENGTH;
+
+    pub const LENGTH_WITHOUT_CHAINCODE: usize = Self::LENGTH - consts::CHAINCODE_LENGTH;
 
     /// depth: `u8`, parent_fingerprint: `[u8; 4]`, child_index: `ChildIndex`, chain_code: `[u8; 32]`
     pub fn new(
@@ -71,11 +76,27 @@ impl ExtAttributes {
         }
     }
 
+    /// this cannot be restored back to the form of 'from_bytes'
+    #[inline]
+    pub fn to_bytes_without_chaincode(&self) -> [u8; Self::LENGTH_WITHOUT_CHAINCODE] {
+        let mut bytes = [0u8; Self::LENGTH_WITHOUT_CHAINCODE];
+        for (src, dst) in bytes.iter_mut().zip(
+            [self.depth].iter().chain(
+                self.parent_fingerprint
+                    .iter()
+                    .chain(self.child_index.to_bits().to_be_bytes().iter()),
+            ),
+        ) {
+            *src = *dst;
+        }
+        bytes
+    }
+
     #[inline]
     pub fn to_bytes(&self) -> [u8; Self::LENGTH] {
-        [self.depth]
-            .iter()
-            .chain(
+        let mut bytes = [0u8; Self::LENGTH];
+        for (src, dst) in bytes.iter_mut().zip(
+            [self.depth].iter().chain(
                 self.parent_fingerprint.iter().chain(
                     self.child_index
                         .to_bits()
@@ -83,11 +104,11 @@ impl ExtAttributes {
                         .iter()
                         .chain(self.chain_code.iter()),
                 ),
-            )
-            .copied()
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap()
+            ),
+        ) {
+            *src = *dst;
+        }
+        bytes
     }
 
     #[inline]
@@ -138,11 +159,12 @@ impl Drop for ExtAttributes {
 
 pub type PrefixNumbs = u32;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ExtPrefix {
     pub chars: [u8; Self::LENGTH],
     pub numbs: PrefixNumbs,
 }
+
 impl ExtPrefix {
     /// 4 bytes
     pub const LENGTH: usize = consts::PREFIX_LENGTH;
@@ -234,10 +256,5 @@ impl FromStr for ExtPrefix {
 impl AsRef<str> for ExtPrefix {
     fn as_ref(&self) -> &str {
         self.as_str()
-    }
-}
-impl Drop for ExtPrefix {
-    fn drop(&mut self) {
-        self.numbs.zeroize();
     }
 }
