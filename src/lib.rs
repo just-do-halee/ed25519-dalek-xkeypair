@@ -4,7 +4,7 @@
 //! # ***`ed25519-dalek-xkeypair`***
 //! *BIP32 implementation for ed25519-dalek key pairs.*
 
-#![cfg_attr(not(feature = "std"), not(test), no_std)]
+#![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
 
 pub extern crate derivation_path;
 pub extern crate ed25519_dalek;

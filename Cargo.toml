@@ -1,6 +1,6 @@
 [package]
 name = "ed25519-dalek-xkeypair"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["just-do-halee <just.do.halee@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -16,12 +16,14 @@ categories = ["cryptography", "no-std"]
 default = ["std"]
 std = [
     "ed25519-dalek/std",
-    "derivation-path/std",
+    "derivation-path/default",
     "bs58/std",
-    "ripemd160/std",
-    "sha2/std",
+    "ripemd160/default",
+    "sha2/default",
     "hmac/std",
-    "utils-results/std"
+    "utils-results/default",
+    "zeroize/default",
+    "hex/std"
     ]
 
 [dependencies]
