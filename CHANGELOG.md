@@ -1,3 +1,10 @@
+## 1.0.2 (September 4, 2021)
+
+### Cargo.toml fix
+* utils-results version
+
+---
+
 ## 1.0.1 (September 3, 2021)
 
 ### A typing error.

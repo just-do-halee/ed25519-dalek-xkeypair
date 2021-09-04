@@ -22,7 +22,7 @@
 
 ```toml
 [dependencies]
-ed25519-dalek-xkeypair = "1.0.1"
+ed25519-dalek-xkeypair = "1.0.2"
 ```
 
 ## No-std
@@ -31,7 +31,7 @@ Disable default feature(allocator is needed).
 
 ```toml
 [dependencies]
-ed25519-dalek-xkeypair = { version = "1.0.1", default-features = false }
+ed25519-dalek-xkeypair = { version = "1.0.2", default-features = false }
 ```
 
 ## License:
